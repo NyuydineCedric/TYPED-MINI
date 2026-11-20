@@ -1,0 +1,8 @@
+int age = 20;
+float height = 1.75;
+bool active = true;
+char grade = 'A';
+
+if (age >= 18) {
+    age = age + 1;
+}
