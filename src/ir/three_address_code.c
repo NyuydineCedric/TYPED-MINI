@@ -211,7 +211,6 @@ static char *convert_to_float(
     if (source_type == AST_TYPE_INT &&
         target_type == AST_TYPE_FLOAT)
     {
-
         char *temporary = new_temporary(generator);
 
         emit(
@@ -233,6 +232,54 @@ static char *convert_to_float(
     free(operand);
 
     return NULL;
+}
+
+/*
+ * Calculate the Sethi-Ullman number of an expression tree.
+ *
+ * A leaf requires one register.
+ * A unary expression inherits its operand's requirement.
+ * A binary expression:
+ *   - requires one additional register if both children
+ *     have equal requirements;
+ *   - otherwise requires the maximum of the two.
+ */
+static unsigned int sethi_ullman_number(const ASTNode *node)
+{
+    if (node == NULL)
+    {
+        return 0;
+    }
+
+    switch (node->type)
+    {
+    case AST_BINARY_EXPRESSION:
+    {
+        unsigned int left_number =
+            sethi_ullman_number(
+                node->data.binary_expression.left);
+
+        unsigned int right_number =
+            sethi_ullman_number(
+                node->data.binary_expression.right);
+
+        if (left_number == right_number)
+        {
+            return left_number + 1;
+        }
+
+        return left_number > right_number
+                   ? left_number
+                   : right_number;
+    }
+
+    case AST_UNARY_EXPRESSION:
+        return sethi_ullman_number(
+            node->data.unary_expression.operand);
+
+    default:
+        return 1;
+    }
 }
 
 /* Forward declarations */
@@ -259,7 +306,6 @@ static char *generate_expression(
 
     switch (node->type)
     {
-
     case AST_INTEGER_LITERAL:
         *result_type = AST_TYPE_INT;
 
@@ -318,33 +364,92 @@ static char *generate_expression(
 
     case AST_BINARY_EXPRESSION:
     {
-        ASTDataType left_type;
-        ASTDataType right_type;
+        ASTNode *left_node =
+            node->data.binary_expression.left;
 
-        char *left = generate_expression(
-            generator,
-            node->data.binary_expression.left,
-            &left_type);
-
-        if (left == NULL)
-        {
-            return NULL;
-        }
-
-        char *right = generate_expression(
-            generator,
-            node->data.binary_expression.right,
-            &right_type);
-
-        if (right == NULL)
-        {
-            free(left);
-            return NULL;
-        }
+        ASTNode *right_node =
+            node->data.binary_expression.right;
 
         ASTOperator operator =
             node->data.binary_expression.operator;
 
+        ASTDataType left_type;
+        ASTDataType right_type;
+
+        char *left = NULL;
+        char *right = NULL;
+
+        /*
+         * Sethi-Ullman evaluation ordering.
+         *
+         * Evaluate the subtree with the higher register
+         * requirement first.
+         *
+         * Logical AND and OR are excluded to preserve
+         * their left-to-right evaluation order.
+         */
+        unsigned int left_number =
+            sethi_ullman_number(left_node);
+
+        unsigned int right_number =
+            sethi_ullman_number(right_node);
+
+        int evaluate_right_first =
+            right_number > left_number &&
+            operator != AST_OP_AND &&
+            operator != AST_OP_OR;
+
+        if (evaluate_right_first)
+        {
+            right = generate_expression(
+                generator,
+                right_node,
+                &right_type);
+
+            if (right == NULL)
+            {
+                return NULL;
+            }
+
+            left = generate_expression(
+                generator,
+                left_node,
+                &left_type);
+
+            if (left == NULL)
+            {
+                free(right);
+                return NULL;
+            }
+        }
+        else
+        {
+            left = generate_expression(
+                generator,
+                left_node,
+                &left_type);
+
+            if (left == NULL)
+            {
+                return NULL;
+            }
+
+            right = generate_expression(
+                generator,
+                right_node,
+                &right_type);
+
+            if (right == NULL)
+            {
+                free(left);
+                return NULL;
+            }
+        }
+
+        /*
+         * Preserve the original left and right operands
+         * even when their evaluation order is changed.
+         */
         int numeric_operation =
             operator == AST_OP_ADD ||
             operator == AST_OP_SUBTRACT ||
@@ -357,31 +462,44 @@ static char *generate_expression(
             operator == AST_OP_EQUAL ||
             operator == AST_OP_NOT_EQUAL;
 
+        /*
+         * Apply the language's implicit int-to-float
+         * conversion when numeric operand types differ.
+         */
         if (numeric_operation &&
             left_type != right_type)
         {
-
             if (left_type == AST_TYPE_INT &&
                 right_type == AST_TYPE_FLOAT)
             {
-
                 left = convert_to_float(
                     generator,
                     left,
                     left_type,
                     AST_TYPE_FLOAT);
 
+                if (left == NULL)
+                {
+                    free(right);
+                    return NULL;
+                }
+
                 left_type = AST_TYPE_FLOAT;
             }
             else if (left_type == AST_TYPE_FLOAT &&
                      right_type == AST_TYPE_INT)
             {
-
                 right = convert_to_float(
                     generator,
                     right,
                     right_type,
                     AST_TYPE_FLOAT);
+
+                if (right == NULL)
+                {
+                    free(left);
+                    return NULL;
+                }
 
                 right_type = AST_TYPE_FLOAT;
             }
@@ -393,7 +511,6 @@ static char *generate_expression(
 
         switch (operator)
         {
-
         case AST_OP_ADD:
             tac_operation = TAC_ADD;
             *result_type =
@@ -484,6 +601,10 @@ static char *generate_expression(
             return NULL;
         }
 
+        /*
+         * The emitted instruction retains the correct
+         * operand positions regardless of evaluation order.
+         */
         emit(
             generator,
             tac_operation,
@@ -575,7 +696,6 @@ static void generate_statement(
 
     switch (node->type)
     {
-
     case AST_PROGRAM:
     {
         ASTNodeList *current =
@@ -860,7 +980,6 @@ static const char *operation_name(TACOperation operation)
 {
     switch (operation)
     {
-
     case TAC_ASSIGN:
         return "=";
 
@@ -972,13 +1091,11 @@ void tac_print(const TACProgram *program)
 
     while (current != NULL)
     {
-
         const char *operation =
             operation_name(current->operation);
 
         switch (current->operation)
         {
-
         case TAC_LABEL:
             printf("%s:\n", current->result);
             break;
