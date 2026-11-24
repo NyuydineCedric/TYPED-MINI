@@ -1,0 +1,2 @@
+bool active = true;
+int result = active + 5;
