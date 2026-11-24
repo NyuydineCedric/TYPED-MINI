@@ -7,6 +7,8 @@
 
 #include "../optimiser/optimizer.h"
 
+#include "../codegen/codegen.h"
+
 extern FILE *yyin;
 extern int yyparse(void);
 extern ASTNode *ast_root;
@@ -113,6 +115,23 @@ int main(int argc, char *argv[])
     printf("\n========== AFTER OPTIMISATION ==========\n");
     optimizer_print_cfg(cfg);
 
+    printf("\nStarting target code generation...\n");
+
+    if (!codegen_generate(tac_program, "output.tasm"))
+    {
+        fprintf(stderr, "\nCompilation failed during target code generation.\n");
+
+        optimizer_free_cfg(cfg);
+        tac_free(tac_program);
+        ast_free(ast_root);
+        ast_root = NULL;
+
+        return EXIT_FAILURE;
+    }
+
+    printf("Target code generation successful.\n");
+    printf("Generated target code: output.tasm\n");
+
     optimizer_free_cfg(cfg);
     tac_free(tac_program);
 
@@ -120,7 +139,7 @@ int main(int argc, char *argv[])
     ast_root = NULL;
 
     printf("\n=================================\n");
-    printf("COMPILATION FRONTEND SUCCESSFUL!\n");
+    printf("COMPILATION SUCCESSFUL!\n");
     printf("=================================\n");
 
     return EXIT_SUCCESS;

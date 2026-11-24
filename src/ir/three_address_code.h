@@ -45,6 +45,16 @@ typedef struct TACInstruction
     char *operand1;
     char *operand2;
 
+    /*
+     * Type information used by the backend.
+     *
+     * For operations without a value result, such as
+     * labels and jumps, these fields are ignored.
+     */
+    ASTDataType result_type;
+    ASTDataType operand1_type;
+    ASTDataType operand2_type;
+
     struct TACInstruction *next;
 } TACInstruction;
 

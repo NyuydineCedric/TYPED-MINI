@@ -13,6 +13,7 @@ SOURCES = \
 	src/semantic/type_checker.c \
 	src/ir/three_address_code.c \
 	src/optimiser/optimizer.c \
+	src/codegen/codegen.c \
 	src/driver/main.c \
 	src/parser/parser.tab.c \
 	src/lexer/lex.yy.c

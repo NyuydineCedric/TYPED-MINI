@@ -93,7 +93,10 @@ static void emit(
     TACOperation operation,
     const char *result,
     const char *operand1,
-    const char *operand2)
+    const char *operand2,
+    ASTDataType result_type,
+    ASTDataType operand1_type,
+    ASTDataType operand2_type)
 {
     TACInstruction *instruction = calloc(1, sizeof(TACInstruction));
 
@@ -104,9 +107,14 @@ static void emit(
     }
 
     instruction->operation = operation;
+
     instruction->result = copy_string(result);
     instruction->operand1 = copy_string(operand1);
     instruction->operand2 = copy_string(operand2);
+
+    instruction->result_type = result_type;
+    instruction->operand1_type = operand1_type;
+    instruction->operand2_type = operand2_type;
 
     if (generator->program->head == NULL)
     {
@@ -218,7 +226,10 @@ static char *convert_to_float(
             TAC_INT_TO_FLOAT,
             temporary,
             operand,
-            NULL);
+            NULL,
+            AST_TYPE_FLOAT,
+            source_type,
+            AST_TYPE_INT);
 
         free(operand);
 
@@ -447,8 +458,7 @@ static char *generate_expression(
         }
 
         /*
-         * Preserve the original left and right operands
-         * even when their evaluation order is changed.
+         * Identify operations that require numeric operands.
          */
         int numeric_operation =
             operator == AST_OP_ADD ||
@@ -463,8 +473,8 @@ static char *generate_expression(
             operator == AST_OP_NOT_EQUAL;
 
         /*
-         * Apply the language's implicit int-to-float
-         * conversion when numeric operand types differ.
+         * Apply implicit int-to-float conversion when
+         * numeric operand types differ.
          */
         if (numeric_operation &&
             left_type != right_type)
@@ -602,15 +612,18 @@ static char *generate_expression(
         }
 
         /*
-         * The emitted instruction retains the correct
-         * operand positions regardless of evaluation order.
+         * Preserve original operand positions regardless
+         * of the order in which expressions were evaluated.
          */
         emit(
             generator,
             tac_operation,
             temporary,
             left,
-            right);
+            right,
+            *result_type,
+            left_type,
+            right_type);
 
         free(left);
         free(right);
@@ -666,7 +679,10 @@ static char *generate_expression(
             tac_operation,
             temporary,
             operand,
-            NULL);
+            NULL,
+            *result_type,
+            operand_type,
+            AST_TYPE_INT);
 
         free(operand);
 
@@ -771,7 +787,10 @@ static void generate_statement(
                     TAC_ASSIGN,
                     name,
                     value,
-                    NULL);
+                    NULL,
+                    declared_type,
+                    declared_type,
+                    AST_TYPE_INT);
             }
 
             free(value);
@@ -824,7 +843,10 @@ static void generate_statement(
                 TAC_ASSIGN,
                 name,
                 value,
-                NULL);
+                NULL,
+                binding->data_type,
+                binding->data_type,
+                AST_TYPE_INT);
         }
 
         free(value);
@@ -854,7 +876,10 @@ static void generate_statement(
             TAC_IF_FALSE_GOTO,
             else_label,
             condition,
-            NULL);
+            NULL,
+            AST_TYPE_INT,
+            condition_type,
+            AST_TYPE_INT);
 
         free(condition);
 
@@ -869,14 +894,20 @@ static void generate_statement(
                 TAC_GOTO,
                 end_label,
                 NULL,
-                NULL);
+                NULL,
+                AST_TYPE_INT,
+                AST_TYPE_INT,
+                AST_TYPE_INT);
 
             emit(
                 generator,
                 TAC_LABEL,
                 else_label,
                 NULL,
-                NULL);
+                NULL,
+                AST_TYPE_INT,
+                AST_TYPE_INT,
+                AST_TYPE_INT);
 
             generate_statement(
                 generator,
@@ -887,7 +918,10 @@ static void generate_statement(
                 TAC_LABEL,
                 end_label,
                 NULL,
-                NULL);
+                NULL,
+                AST_TYPE_INT,
+                AST_TYPE_INT,
+                AST_TYPE_INT);
         }
         else
         {
@@ -896,7 +930,10 @@ static void generate_statement(
                 TAC_LABEL,
                 else_label,
                 NULL,
-                NULL);
+                NULL,
+                AST_TYPE_INT,
+                AST_TYPE_INT,
+                AST_TYPE_INT);
         }
 
         free(else_label);
@@ -915,7 +952,10 @@ static void generate_statement(
             TAC_LABEL,
             start_label,
             NULL,
-            NULL);
+            NULL,
+            AST_TYPE_INT,
+            AST_TYPE_INT,
+            AST_TYPE_INT);
 
         ASTDataType condition_type;
 
@@ -936,7 +976,10 @@ static void generate_statement(
             TAC_IF_FALSE_GOTO,
             end_label,
             condition,
-            NULL);
+            NULL,
+            AST_TYPE_INT,
+            condition_type,
+            AST_TYPE_INT);
 
         free(condition);
 
@@ -949,14 +992,20 @@ static void generate_statement(
             TAC_GOTO,
             start_label,
             NULL,
-            NULL);
+            NULL,
+            AST_TYPE_INT,
+            AST_TYPE_INT,
+            AST_TYPE_INT);
 
         emit(
             generator,
             TAC_LABEL,
             end_label,
             NULL,
-            NULL);
+            NULL,
+            AST_TYPE_INT,
+            AST_TYPE_INT,
+            AST_TYPE_INT);
 
         free(start_label);
         free(end_label);
