@@ -1,0 +1,7 @@
+float price = 25.5;
+float discount = 5.5;
+float total = price - discount;
+
+bool is_expensive = total > 15.0;
+
+float negative = -total;
